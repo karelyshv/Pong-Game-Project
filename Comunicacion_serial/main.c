@@ -1,4 +1,4 @@
-/* ###################################################################
+/* #/* ###################################################################
 **     Filename    : main.c
 **     Project     : ADC
 **     Processor   : MC9S08QE128CLK
@@ -35,6 +35,7 @@
 #include "Bit1.h"
 #include "TI1.h"
 #include "Cap1.h"
+#include "Bit2.h"
 /* Include shared modules, which are used for whole project */
 #include "PE_Types.h"
 #include "PE_Error.h"
@@ -45,14 +46,20 @@
 
 unsigned char estado = ESPERAR;
 unsigned char CodError;
-unsigned int Enviados = 2;    // Esta variable no aporta nada más sino el número de elementos del arreglo a enviar.
+unsigned int Enviados = 3;    // Esta variable no aporta nada más sino el número de elementos del arreglo a enviar.
 
 typedef union{
-unsigned char u8[2];
+unsigned char u8[3];
 unsigned int u16;
 }AMPLITUD;
 
-volatile AMPLITUD iADC;
+volatile AMPLITUD iADC, Senal;
+
+unsigned int Marcador = 0xF1;
+unsigned int D1 = 0;
+unsigned int D2 = 0;
+unsigned int A = 0;
+unsigned int B = 0;
 
 void main(void)
 {
@@ -77,13 +84,39 @@ void main(void)
       case MEDIR:
         CodError = AD1_Measure(TRUE);
         CodError = AD1_GetValue16(&iADC.u16);
+        if ( Bit1_GetVal() == 0){
+        	D1 = 1;
+        }
+        if (Bit2_GetVal() == 0){
+        	D2 = 1;
+        }
+        
         estado = ENVIAR;
         break;
     
       case ENVIAR:
+    	  
+   		B = iADC.u16 & 0x7F;
+    	A = (iADC.u16 >> 7) & 0x1F;
+     	if(D1 == 1)
+   		{
+   			A = A | 0x40; // or con 01000000
+   			D1 = 0;
+   		}
+   		if(D2 == 1)
+    	{
+    		A = A | 0x20; // or con 00100000
+    		D2 = 0;
+   		}
 
+   	    Senal.u8[0] = Marcador;
+   	 	Senal.u8[1] = A;
+  	 	Senal.u8[2] = B;
+      
+      
+      // ENVIAR SOLO LA MEDICIÓN DE 16 BITS SIN TRAMA NI PROTOCOLO:
         
-        CodError = AS1_SendBlock(iADC.u8,2,&Enviados); 
+        CodError = AS1_SendBlock(Senal.u8,3,&Enviados); //El arreglo con la medición está en iADC.u8 (notar que es un apuntador)
         estado = ESPERAR;
         
         break;
