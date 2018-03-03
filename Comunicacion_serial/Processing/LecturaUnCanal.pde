@@ -4,8 +4,9 @@ Serial puerto;
 int bitsMost, bitsLeast, high, low, D1, D2, X = 0, N, i, Num, M, valor;
 
 void setup(){
-  puerto = new Serial(this, Serial.list()[0], 115200); 
-  size(800,400);   //Dimensiones de ventana (width, height)
+  puerto = new Serial(this, Serial.list()[0], 115200); //El [0] se cambia segun el puerto en cuestion
+  size(800,400);     //Dimensiones de ventana (width, height)
+  frameRate(30);    // Define cantidad de cuadros por segundo que muestra en la grafica
   grid();
 }
 
@@ -15,7 +16,7 @@ void draw(){
     
     M = 0;                     //Contador de arreglo ordenado  ArrayOrdered
     i = 0;                     //Contador de arreglo de data   ArrayData
-    Num = 3*width;             //Tamaño arreglo de lectura ArrayRead
+    Num = puerto.available();             //Tamaño arreglo de lectura ArrayRead
     int[] ArrayRead = new int[Num];
     int[] ArrayOrdered = new int[Num-Num/3];
     
@@ -27,7 +28,7 @@ void draw(){
     
     //******Se ordena el arreglo sin los encabezados
     for (int N = 0; N < Num - 2; N = N + 1){
-     if(ArrayRead[N] == 241 & ArrayRead[N+1] != 241){
+     if(ArrayRead[N] == 241 && ArrayRead[N+1] != 241){
        ArrayOrdered[M] = ArrayRead[N+1];
        M = M + 1;
        if(ArrayRead[N+2] != 241){
@@ -38,35 +39,41 @@ void draw(){
     }
     
     int[] ArrayData = new int[M/2];
-
+    
+    //println("M = " + M);
+    //println("Ordenado:");
+    //println(ArrayOrdered);
+    
     //***Se define las tramas de interes y se decodifican
     for (int N = 0; N < M - 1 ; N = N+2){
-      bitsMost = ArrayOrdered[N];                    //Trama con los 8 bits mas significativos
+      bitsMost = ArrayOrdered[N];        //Trama con los 8 bits mas significativos
       bitsLeast = ArrayOrdered[N+1];                 //Trama con los 8 bits menos significativos
       D1 = (bitsMost>>6)&1;                          //Se toma solo el bit de la señal del sensor digital 1   D1
-      D2 = (bitsMost>>5)&1;                          //Se toma solo el bit de la señal del sensor digital 2   D2
+      D2 = (bitsMost>>5)&1;      //Se toma solo el bit de la señal del sensor digital 2   D2
       bitsMost = bitsMost & 31;                      //Se toma los 5 bist correspondiente a la señal analógica
       ArrayData[i] = conversion(bitsMost,bitsLeast); //Decodifica y concatena las tramas
+      //println(ArrayData[i],D1,D2);
       
       //***Graficar dato en el arreglo siempre que no se -1
-      if(ArrayData[i] != -1){                                       
+                                      
         int grafic = (int)map(ArrayData[i], 0, 4000, 200, 60);
         strokeWeight (3);                                           // grosor del trazo
         stroke(0);                                                  // trazo color negro
         point(X,grafic);                                            //Grafica punto indicado   
-        
-        println("D1 = "+D1,"  D2 = "+D2,"   (X,Y) = ( " +X," , " +ArrayData[i], ")");
-      }
-      
+
+      println("D1 = "+D1,"  D2 = "+D2,"   (X,Y) = ( " +X," , " +ArrayData[i], ")");
       X = X + 1;           //Contador de eje X de la gráfica
       
       //***Reinicie la grafica a la izquierda cuando llegue al extemo derecho
-      if(X >= width){      
-        X = 0;
-        grid();           //Redibuja fondo para quitar la grafica que se tenia hasta el momento hasta el momento
+      if(X >= 600){ //width     
+      X = 0;
+      grid();           //Redibuja fondo para quitar la grafica que se tenia hasta el momento hasta el momento
       }
       i = i + 1;          //Contador de escritura en Arreglo de datos   ArrayData
     }
+    
+    //println("Data :");
+    //println(ArrayData);
   }
 }
 
