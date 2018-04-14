@@ -1,0 +1,452 @@
+
+import processing.serial.*;
+
+Serial puerto;
+PShape vida; 
+PFont font;
+int bitsMost, bitsLeast, i, Num, valor, P_I, P_D, acum_D = 0 ,acum_I = 0, k , g = 788, Marcador = 0, vidasI = 6, vidasD = 6, D2_antes;
+boolean Iniciar = false, dobleP = false, menu = true;
+int TamanioBarraD = 150;    //Largo de la barra (Es variable)
+int TamanioBarraI = 150;    //Largo de la barra (Es variable)
+int posicion_D = 2*TamanioBarraD, posicion_I = 2*TamanioBarraI;
+float x = 500, x2 = 400;
+float y = random(200,400), y2 = random(200,400);
+float VelocidadX = 5, VelocidadX2 = 5;  
+float VelocidadY = 5, VelocidadY2 = 5;
+int diam = 30;      //Diámetro de la pelota
+float diamChoque, aD=0, bD=100, cD=160 , aI=0, bI=100, cI=160 , aP=0, bP=100, cP=160, aP2=0, bP2=100, cP2=160;
+color colorL = color(200,0,0);       //mensaje Loser
+color colorW = color(0, 200, 0);    //mensaje Winner
+int Sentido,Sentido2;      //variable para cambio del sentido de la pelota 1 y 2
+int[] D = new int[4];                 //Arreglo con datos digitales
+
+void setup(){
+  puerto = new Serial(this, Serial.list()[0], 115200);
+  size(1100,600);
+  noStroke();
+  smooth();
+  textAlign(CENTER, CENTER); //Posición del texto centrado en x y
+  ellipseMode(CENTER);      //Posición del circulo de choque centrado en x y
+  colorMode(HSB, width, 100, 100, 100);
+}
+
+
+void draw(){
+
+  println(Inicio(),DobleP(), D[2], D[3]);
+  game();      //Se ejecuta con los últimos valores amacenado, y asi aumenta la velocidad de la ejecución del desplazamiento de la pelota
+  while(puerto.available() > 0){
+    Num = puerto.available();             //Tamaño arreglo de lectura ArrayRead
+    int[] ArrayRead = new int[Num];
+    float[] AceleracionX = new float[Num];
+    float[] AceleracionY = new float[Num];
+    float[] AnguloX = new float[Num];
+    float[] AnguloY = new float[Num];
+    
+    i = 0;                     //Contador de arreglo de data  
+    
+//*****Se guarda en un arreglo lo leído por puerto serial
+    for (int N = 0; N < Num; N = N+1){     //Se lee 0xF2 0D1D2AAAAA 0AAAAAAA 0D3D4BBBBB 0BBBBBBB
+      ArrayRead[N] = puerto.read();
+      //println(ArrayRead[N]);
+    }
+    
+//******Se ordena los dos arreglos sin los encabezados, se decodifican y grafican
+    for (int N = 0; N < Num - 4; N = N + 1){
+      if(ArrayRead[N] == 241){
+         i = i + 1 ;
+         AceleracionX[i] = Decodificar (ArrayRead[N+1],ArrayRead[N+2], D, 1); //Decodifica y concatena las tramas
+         AceleracionY[i] = Decodificar (ArrayRead[N+3],ArrayRead[N+4], D, 3); 
+ 
+         AnguloX[i] = degrees(acos(AceleracionX[i]/g));
+         AnguloY[i] = degrees(acos(AceleracionY[i]/g));
+         
+//*******Se aplica un filtro digital a las señales analógicas para mayor estabilidad del la posición 
+          P_D = int((width/68.0 )*AnguloX[i]); //conversión de escalado de angulo con rango de desplazamiento
+          P_I = int((width/68.0 )*AnguloY[i]);
+          acum_D = acum_D + P_D;
+          acum_I = acum_I + P_I;
+          k = k+1;
+          
+          if (k==200 ){
+            if(Iniciar){
+              posicion_D = acum_D/k;
+              posicion_I = acum_I/k;
+            }
+          k = 0;
+          acum_D = 0;
+          acum_I = 0;
+          game();
+          }
+        
+         //println("  AceleraciónX = " +AceleracionX[i],"   AceleraciónY = " +AceleracionY[i],"   AnguloX = " +AnguloX[i], "   AnguloY = " +AnguloY[i], "      "+x, D[0]);
+
+         }
+     }
+   }
+    
+}
+
+
+int Decodificar (int bitsMost, int bitsLeast, int D[], int n){
+  D[n-1] = (bitsMost>>6)&1;                          //Se toma solo el bit de la señal del sensor digital 1 
+  D[n] = (bitsMost>>5)&1;                            //Se toma solo el bit de la señal del sensor digital 2 
+  bitsMost = (bitsMost & 31)<<7;                      //Se toma los 5 bist correspondiente a la señal analógica y se shiftea hacia la izquierda [HHHHH0000000]
+  valor = bitsMost|bitsLeast;
+  return valor;
+}
+
+boolean Inicio() {
+  if (D[0]==1){
+  Iniciar = !Iniciar;
+  menu = false;
+  }
+  return Iniciar;
+}
+
+boolean DobleP() {
+  if ( D[2]==1  && D[2] != D2_antes ){
+  dobleP = !dobleP;
+  D[2]=D2_antes;
+  }
+  return dobleP;
+}
+
+/*****Funcion para colorear con efecto de neon:
+Dependiendo de las dimensiones de la figura que se desee, se crea la forma correspondiente en diferentes capas con un coloreado que se asemeje al neon
+*/
+void Neon_(float X, float Y,int Ancho, int Alto,int Curva,int Color){
+    if(Ancho == Alto){
+    fill(Color, 100, 500, 100);
+    ellipse(X, Y, Ancho, Ancho);
+    fill(255,0, 600, 50-Color/20);
+    ellipse(X,Y,Ancho*0.7, Ancho*0.7);  
+    fill(Color, 100, 600, 10+Color/40);
+    ellipse(X,Y,Ancho*1.1, Ancho*1.1);
+    }
+  if(Ancho > Alto){
+    fill(Color, 100, 500, 100);
+    rect(X,Y,Ancho, Alto,Curva);
+    fill(255,0, 600, 70-Color/20);
+    rect(X,Y+Alto/4,Ancho, Alto/2,Curva);  
+    fill(Color, 100, 600, 10+Color/40);
+    rect(X,Y-Alto/2,Ancho, Alto*2,Curva);
+  }
+  if(Ancho < Alto){
+    fill(Color, 100, 500, 100);
+    rect(X,Y,Ancho, Alto,Curva);
+    fill(255,0, 100, 80-Color/20);
+    rect(X+Ancho/4,Y+(Curva+1)/10, Ancho/2, Alto-(Curva+1)/4,Curva);  
+    fill(Color, 100, 600, 10+Color/40);
+    rect(X-Ancho/2,Y-Alto*0.05,Ancho*2, Alto*1.1,Curva);    
+  }
+}
+
+/*****Función Duplicar:
+Es activada por el valor del parámetro dobleP, si se cumple que el juego ha sido  iniciado y dobleP=true, aparece una segunda pelota, 
+si se cambia la variable a false la seguda pelota desaparece.
+*/
+void Duplicar() {
+  if (Iniciar && dobleP){
+     Neon_(x2,y2,diam,diam,1,int(aP2)); 
+// Derecha -- Si la pelota golpea la barra, se invierte dirección de X2 y se aplica efecto de choque
+    if ( x2 >= width - 40 - diam/2  && x2 <= width - 30 - diam/2 &&  y2 >= posicion_D && y2 <= posicion_D+TamanioBarraD ) {
+      VelocidadX2 = -1*(VelocidadX2 + 2);    //Se invierte dirección de X2
+      x2 = x2 + VelocidadX2;          //Mueve en sentido contrario
+      Marcador = Marcador + 1;
+      fill(aD=random(width),bD=random(70, 100),cD=400, random(50, 100)); //(red, green, blue, opacidad)
+      aP2 = aD ;bP2 = bD ;bP2 = cD; 
+      diamChoque = random(75,150);    //Diámetro aleatorio entre 75 y 150 a circunferencia de choque
+      ellipse(x2,y2,diamChoque,diamChoque);
+      TamanioBarraD = TamanioBarraD-5; // disminuye largo de barra en 5 cada vez que golpea la pelota
+      TamanioBarraD = constrain(TamanioBarraD, 10,150);    //Restringe variable entre un máximo y mínimo  
+    } 
+        
+// Izquierda --  Sí pelota golpea la barra, se cambia dirección de x2
+    else if ( x2 <= 40 + diam/2 && x2 >= 30 + diam/2 && y2 >= posicion_I && y2 <= posicion_I+TamanioBarraI ) {
+      VelocidadX2 = -1*(VelocidadX2 + 2);    //Se invierte dirección de x2
+      x2 = x2 + VelocidadX2;          //Mueve en sentido contrario
+      Marcador = Marcador + 1;
+      fill(aI=random(width),bI=random(70, 100),cI=400, random(50, 100)); //(red, green, blue, opacidad)
+      aP2 = aI ;bP2 = bI ;cP2 = cI; 
+      diamChoque = random(75,150);    //Diámetro aleatorio entre 75 y 150 a circunferencia de choque
+      ellipse(x2,y2,diamChoque,diamChoque);
+      TamanioBarraI = TamanioBarraI-5; // disminuye largo de barra en 5 cada vez que golpea la pelota
+      TamanioBarraI = constrain(TamanioBarraI, 10,150);    //Restringe variable entre un máximo y mínimo  
+    }
+        
+    // Si la pelota golpea abajo o arriba, se cambia dirección de Y 
+    if ( y2 >= height - 30 - diam*0.6){
+      VelocidadY2 = VelocidadY2 * -1;
+      y2 = y2 + VelocidadY2;
+      if ( x2 <= width/2){Neon_(0, height-40, width/2-1, 10,100,int(aP2));}
+      if ( x2 >= width/2){Neon_(width/2+1, height-30, width,10,100,int(aP2));}
+    }
+    if (y2 <= 70 + diam*0.6 ) {
+      VelocidadY2 = VelocidadY2 * -1;
+      y2 = y2 + VelocidadY2;
+      if ( x2 <= width/2){Neon_(0,70,width/2-1,10,100,int(aP2));}
+      if ( x2 >= width/2){Neon_(width/2+1,70,width,10,100,int(aP2));}
+    }
+    if ( x2 > width - 30 - diam/2 || x2 < 30 - diam/2){
+      if(x2 > width - 30 - diam/2){
+        //Sentido = 1;
+        vidasD = vidasD - 1;
+        TamanioBarraD = 150;
+      }
+      if(x2 < 30 - diam/2){
+      // Sentido = -1;
+       vidasI = vidasI - 1 ;
+       TamanioBarraI = 150;
+      }
+
+      x2 = (width/2);
+      y2 = random(height/3, 2*height/3); 
+      VelocidadX2 = VelocidadY2*-Sentido;
+      VelocidadY2 = VelocidadY2*Sentido;
+   }
+    x2 = x2 + VelocidadX2;    //inicia movimiento
+    y2 = y2 + VelocidadY2;
+    
+  }
+}
+
+/*****Función para que crea la forma de un corazón:
+Se crea una forma por segmentos que se unen por los pundos definidos
+X: posicion en el eje x
+Y: posicion en el eje y
+min: parametro variable para modificar el tamaño de la forma
+Modificar color del la forma por los parametros: tono, brillo, intensidad y transparencia respectivamente
+*/
+void formCorazon(int X, int Y,int min, int Color, int bri , int inten , int opac){
+  vida = createShape();
+  vida.beginShape();
+  vida.fill(Color,bri, inten, opac); 
+  vida.noStroke();
+  vida.vertex(min, 0);
+  vida.vertex(min*2, 0);
+  vida.vertex(min*3, min);
+  vida.vertex(min*4, 0);
+  vida.vertex(min*5, 0);
+  vida.vertex(min*6, min);
+  vida.vertex(min*6, min*2);
+  vida.vertex(min*4-3, min*5);
+  vida.vertex(min*3-3, min*5);
+  vida.vertex(0, min*2);
+  vida.vertex(0, min);
+  vida.endShape(CLOSE);
+  shape(vida, X, Y);
+}
+
+/*****Funcion para colocar la cantidad de vidas para cada jugador, representado por filas de corazones:
+Este es un bucle for que se actualiza y modifica según el número de vidas que tenga cada jugador, 
+este valor viene dado por las variables globales vidasD (para jugador de la derecha) y vidasI (para jugador
+de la izquierda), según ésta variable se repite éste número el for, en cada ciclo dibuja un corazón con diferentes capas
+(solo por estética para parecer neon).
+
+min: Parámetro que modifica tamaño de los corazones
+la posicion se modifica en cada bucle, y se dibuja corazones con la funcion anterior formCorazon
+*/
+void vida(int min){ //min es una variable para modificar el tamaño
+  int X = 15, Y = 25;
+  for(int n = 1; n <= vidasI ; n++){    //fila de corazones para jugador de la izquierda
+    formCorazon(X,Y,min,int(aI),100,500,100);  //corazón con color sólido del tono definido por aI
+    formCorazon(X+6,Y+5,min-2,255,0,100,55-int(aI)/10);  // corazón de color blanco de menor tamaño solido centrado sobre la forma anterior
+    formCorazon(X-6,Y-5,min+2, int(aI),100,600,25+int(aI)/40);  // corazón mas grande de color aI con baja opacidad 
+    X = X + 50 ;  // se define  nueva posición para dibujar forma en el siguiente ciclo
+  }
+  X = width-50; Y = 25;    //se modifica valor inicia de X para posicionar del lado derecho de la ventana
+  for(int n = 1; n <= vidasD ; n++){    //fila de corazones para jugador de la derecha
+    formCorazon(X,Y,min,int(aD),100,500,100);  
+    formCorazon(X+6,Y+5,min-2,255,0,100,55-int(aD)/10);
+    formCorazon(X-6,Y-5,min+2, int(aD),100,600,25+int(aD)/40); 
+    X = X - 50 ;  
+  }
+}
+
+
+/*****Funcion scores:
+En la variable Marcador se lleva el conte de choque de las pelotas con las barras y se muestra en pantalla
+*/
+void scores(){
+  fill(255,0,800);
+  font = createFont("Bauhaus 93",40);
+  textFont(font);
+  text(Marcador, width/2, 25);
+}
+
+/*****Funcion menú:
+Muestra la selección de funciones que se asocian a cada botón que sus valores se almacenan en D
+D[1]  Inicio del juego y pausar juego
+D[2]  Reinia el juego, restableciendo valores iniciales
+D[4]  Salir del juego
+*/
+void menu() {
+  background(550,80,70,80);
+  fill(255,0,400); 
+  text("Ping-Pong!", width/2, height/3-100); 
+  text("Menu", width/2, height/3+20);
+  text("~~~~~~~~~~~~", width/2, height/3+80);
+  text("[1] start/Pause", width/2, height/3+100); 
+  text("[2] Reset", width/2, height/3+150);
+  text("[4] Exit", width/2, height/3+200);
+  text("~~~~~~~~~~~~", width/2, height/3+250);
+
+}
+
+/*****Funcion again:
+Esta función reestablece los valores iniciales del juego cuando algun jugador pierde,
+coloca la pelota en una posición fija a la espera de la acción.
+Se muestra el mensaje de game over y da las opciones para jugar de nuevo o salir, con los botones asociados
+estos valores se almacenan en D
+D[1] Yes. Volver a jugar
+D[4] No. Salir de juego
+*/
+void again(){
+    fill(255,0,400);
+    text("Game over", width/2, height/3 - 40);
+    text("Play again?", width/2, height/3 + 50);
+    text("[1] Yes                 [4] No", width/2, height/3 + 150);
+    x = (width/2)-1;
+    y = height/3 + 120;
+    x2 = (width/2)-1;
+    y2 = height/3 + 120 + diam;
+    if(D[0] == 1) {
+      VelocidadX = 5;
+      VelocidadX2 = 5;
+      VelocidadY = 5;
+      VelocidadY2 = 5;
+      vidasI = 6;
+      vidasD = 6; 
+      Marcador = 0;
+      dobleP = false;
+    }
+} 
+
+/*****Funcion game over:
+Muestra el mesaje de ganador o perdeor para cada jugador cuando alguna de las variables globales
+vidasI o vidasD sea igual a cero,luego invoca la función again
+*/
+void gameOver() {
+  if(vidasD == 0) {
+    fill(aI,100,500,100);  
+    text("Winner", width/4, height/3);
+    fill(aD,100,500,100);
+    text("Losser", 3*width/4, height/3); 
+    again();
+  }
+  if(vidasI == 0) {
+    fill(aD,100,500,100);
+    text("Winner", 3*width/4, height/3);
+    fill(aI,100,500,100);
+    text("Losser", width/4, height/3);
+    again();
+  }
+}   
+
+
+void game(){
+  background(0);
+//Limitaciones de movimiento de las barras
+  if(posicion_D > height - TamanioBarraD - 35){posicion_D = height - TamanioBarraD - 35;}
+  if(posicion_I > height - TamanioBarraI - 35){posicion_I = height - TamanioBarraD - 35;}
+  if(posicion_D < 80){posicion_D = 80;}
+  if(posicion_I < 80){posicion_I = 80;}
+  vida(5); //min = 5,  parámetro que define taamño del corazón
+  Neon_(width-45,posicion_D,10,TamanioBarraD,15,int(aD));
+  Neon_(40,posicion_I,10,TamanioBarraI,15,int(aI));
+  fill(255,0,90);
+  rect(width/2, 70, 2, height-95);   //linea central vertical (posición x, posición y, ancho, alto)
+//Paredes superior e inferior
+  rect(width/2+1, 70, width, 5,100,100,100,100);  
+  rect(0, 70, width/2-1, 5 , 100,100,100,100);
+  rect(width/2+1, height-30, width, 5,100,100,100,100);
+  rect(0, height-30, width/2-1, 5 , 100,100,100,100);
+  Neon_(x,y,diam,diam,1,int(aP));   //pelota (posicion en X, posición en y, diámetro ancho, diámetro alto)
+  Duplicar();  
+  gameOver();
+  scores();
+  if(menu==true){menu();}        
+        
+  if (Iniciar) {
+// Derecha -- Si la pelota golpea la barra, se invierte dirección de X y se aplica efecto de choque
+    if ( x >= width - 40 - diam/2  && x <= width - 30 - diam/2 &&  y >= posicion_D && y <= posicion_D+TamanioBarraD ) {////////////////////////////
+      VelocidadX = -1*(VelocidadX + 2);    //Se invierte dirección de X
+      x = x + VelocidadX;          //Mueve en sentido contrario
+      Marcador = Marcador + 1;  
+      fill(aD=random(width),bD=random(70, 100),cD=400, random(50, 100)); //(red, green, blue, opacidad)
+      aP = aD ;bP = bD ;bP = cD; 
+      diamChoque = random(75,150);    //Diámetro aleatorio entre 75 y 150 a circunferencia de choque
+      ellipse(x,y,diamChoque,diamChoque);
+      TamanioBarraD = TamanioBarraD-5; // disminuye largo de barra en 5 cada vez que golpea la pelota
+      TamanioBarraD = constrain(TamanioBarraD, 10,150);    //Restringe variable entre un máximo y mínimo  
+    } 
+        
+// Izquierda --  Sí pelota golpea la barra, se cambia dirección de x
+    else if ( x <= 40 + diam/2 && x >= 30 + diam/2 && y >= posicion_I && y <= posicion_I+TamanioBarraI ) {
+      VelocidadX = -1*(VelocidadX + 2);    //Se invierte dirección de X
+      x = x + VelocidadX;          //Mueve en sentido contrario
+      Marcador = Marcador + 1;
+      fill(aI=random(width),bI=random(70, 100),cI=400, random(50, 100)); //(red, green, blue, opacidad)
+      aP = aI ;bP = bI ;cP = cI; 
+      diamChoque = random(75,150);    //Diámetro aleatorio entre 75 y 150 a circunferencia de choque
+      ellipse(x,y,diamChoque,diamChoque);
+      TamanioBarraI = TamanioBarraI-5; // Disminuye largo de barra en 5 cada vez que golpea la pelota
+      TamanioBarraI = constrain(TamanioBarraI, 10,150);    //Restringe variable entre un máximo y mínimo  
+    }
+        
+    // Si la pelota golpea abajo o arriba, se cambia dirección de Y 
+    if ( y >= height - 30 - diam*0.6){
+      VelocidadY = VelocidadY * -1;
+      y = y + VelocidadY;
+      if ( x <= width/2){Neon_(0, height-40, width/2-1, 10,100,int(aP));}
+      if ( x >= width/2){Neon_(width/2+1, height-30, width,10,100,int(aP));}
+    }
+    if (y <= 70 + diam*0.6 ) {
+      VelocidadY = VelocidadY * -1;
+      y = y + VelocidadY;
+      if ( x <= width/2){Neon_(0,70,width/2-1,10,100,int(aP));}
+      if ( x >= width/2){Neon_(width/2+1,70,width,10,100,int(aP));}
+    }
+    // Reseteo si no se alcanza la pelota con la barra
+    if (x > width - 30 - diam/2 || x < 30 - diam/2 || D[1]==1){
+      if (x > width - 30 - diam/2){  
+        Sentido = 1;
+        vidasD = vidasD - 1;
+        TamanioBarraD = 150;
+      }
+      if(x < 30 - diam/2){
+        Sentido = -1;
+        vidasI = vidasI - 1 ;
+        TamanioBarraI = 150;
+      }
+      if(D[1]==1) {     //Se reinicia la partida manualmente, se rrestablece valores
+        VelocidadX = 5;
+        VelocidadX2 = 5;
+        VelocidadY = 5;
+        VelocidadY2 = 5;
+        vidasI = 6;
+        vidasD = 6; 
+        Marcador = 0;
+        aI=aP; aD=aP;
+        D[1]=0; 
+        dobleP = false;
+        menu = true;
+        Iniciar = false;
+      }
+      x = (width/2);
+      y = random(height/3, 2*height/3); 
+      VelocidadX = 6*Sentido;
+      VelocidadY = 6*-Sentido;
+    }
+    if (D[3] == 1){exit();}
+
+    x = x + VelocidadX;    //Variable posición de la pelota
+    y = y + VelocidadY; 
+  }
+  if(Iniciar==false && menu==false)
+  {
+  fill(255,0,400); 
+  text("Pause", width/2, height/3+20);
+  }
+}
